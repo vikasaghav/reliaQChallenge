@@ -1,94 +1,138 @@
 package com.example.rqchallenge.controller;
 
-import com.example.rqchallenge.employees.IEmployeeController;
 import com.example.rqchallenge.entities.Employee;
-import com.example.rqchallenge.service.EmployeeService;
+import com.example.rqchallenge.exceptions.NotFoundException;
+import com.example.rqchallenge.service.EmployeeServiceInterface;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.http.ResponseEntity;
-import org.springframework.web.bind.annotation.RestController;
+import org.springframework.http.HttpStatus;
+import org.springframework.validation.annotation.Validated;
+import org.springframework.web.bind.annotation.*;
 
+import javax.validation.Valid;
+import javax.validation.constraints.NotBlank;
 import java.util.List;
 import java.util.Map;
 
 @RestController
-public class EmployeeController implements IEmployeeController {
+@RequestMapping("/api/employees")
+@Validated
+public class EmployeeController {
 
-    private final EmployeeService employeeService;
+    private final EmployeeServiceInterface employeeService;
     private static final Logger logger = LoggerFactory.getLogger(EmployeeController.class);
 
     @Autowired
-    public EmployeeController(EmployeeService employeeService) {
+    public EmployeeController(EmployeeServiceInterface employeeService) {
         this.employeeService = employeeService;
     }
 
-    @Override
-    public ResponseEntity<List<Employee>> getAllEmployees() {
-        logger.info("Fetching all employees");
-        List<Employee> employees = employeeService.getAllEmployees();
-        logger.info("Retrieved {} employees", employees.size());
-        return ResponseEntity.ok(employees);
+    @GetMapping
+    public List<Employee> getAllEmployees() {
+        try {
+            logger.info("Fetching all employees");
+            return employeeService.getAllEmployees();
+        } catch (Exception e) {
+            logger.error("Error fetching all employees: {}", e.getMessage());
+            throw e;
+        }
     }
 
-    @Override
-    public ResponseEntity<List<Employee>> getEmployeesByNameSearch(String searchString) {
-        logger.info("Searching employees by name: {}", searchString);
-        List<Employee> employees = employeeService.getEmployeesByNameSearch(searchString);
-        logger.info("Found {} employees matching the search criteria", employees.size());
-        return ResponseEntity.ok(employees);
+    @GetMapping("/search/{searchString}")
+    public List<Employee> getEmployeesByNameSearch(@PathVariable @NotBlank String searchString) {
+        try {
+            logger.info("Searching employees by name: {}", searchString);
+            return employeeService.getEmployeesByNameSearch(searchString);
+        } catch (Exception e) {
+            logger.error("Error searching employees by name {}: {}", searchString, e.getMessage());
+            throw e;
+        }
     }
 
-    @Override
-    public ResponseEntity<Employee> getEmployeeById(String id) {
-        logger.info("Fetching employee by ID: {}", id);
-        Employee employee = employeeService.getEmployeeById(id);
-        if (employee != null) {
+    @GetMapping("/{id}")
+    public Employee getEmployeeById(@PathVariable @NotBlank String id) {
+        try {
+            logger.info("Fetching employee by ID: {}", id);
+            Employee employee = employeeService.getEmployeeById(id);
+            if (employee == null) {
+                logger.warn("Employee with ID {} not found", id);
+                throw new NotFoundException("Employee not found with ID " + id);
+            }
             logger.info("Retrieved employee with ID {}", id);
-            return ResponseEntity.ok(employee);
-        } else {
+            return employee;
+        } catch (NotFoundException e) {
             logger.warn("Employee with ID {} not found", id);
-            return ResponseEntity.notFound().build();
+            throw e;
+        } catch (Exception e) {
+            logger.error("Error fetching employee with ID {}: {}", id, e.getMessage());
+            throw e;
         }
     }
 
-    @Override
-    public ResponseEntity<Integer> getHighestSalaryOfEmployees() {
-        logger.info("Fetching highest salary of employees");
-        Integer highestSalary = employeeService.getHighestSalaryOfEmployees();
-        logger.info("Highest salary found: {}", highestSalary);
-        return ResponseEntity.ok(highestSalary);
-    }
-
-    @Override
-    public ResponseEntity<List<String>> getTopTenHighestEarningEmployeeNames() {
-        logger.info("Fetching top 10 highest earning employee names");
-        List<String> topNames = employeeService.getTop10HighestEarningEmployeeNames();
-        logger.info("Top 10 highest earning employee names: {}", topNames);
-        return ResponseEntity.ok(topNames);
-    }
-
-    @Override
-    public ResponseEntity<Employee> createEmployee(Map<String, Object> employeeInput) {
-        String name = (String) employeeInput.get("name");
-        int salary = (int) employeeInput.get("salary");
-        int age = (int) employeeInput.get("age");
-        logger.info("Creating employee: Name={}, Salary={}, Age={}", name, salary, age);
-        Employee newEmployee = employeeService.createEmployee(name, salary, age);
-        if (newEmployee != null) {
-            logger.info("Employee created successfully with ID {}", newEmployee.getId());
-            return ResponseEntity.ok(newEmployee);
-        } else {
-            logger.error("Failed to create employee");
-            return ResponseEntity.badRequest().build();
+    @GetMapping("/highest-salary")
+    public Integer getHighestSalaryOfEmployees() {
+        try {
+            logger.info("Fetching highest salary of employees");
+            return employeeService.getHighestSalaryOfEmployees();
+        } catch (Exception e) {
+            logger.error("Error fetching highest salary of employees: {}", e.getMessage());
+            throw e;
         }
     }
 
-    @Override
-    public ResponseEntity<String> deleteEmployeeById(String id) {
-        logger.info("Deleting employee with ID: {}", id);
-        String message = employeeService.deleteEmployee(id);
-        logger.info("Deletion response: {}", message);
-        return ResponseEntity.ok(message);
+    @GetMapping("/top-ten-highest-earning-names")
+    public List<String> getTopTenHighestEarningEmployeeNames() {
+        try {
+            logger.info("Fetching top 10 highest earning employee names");
+            return employeeService.getTop10HighestEarningEmployeeNames();
+        } catch (Exception e) {
+            logger.error("Error fetching top 10 highest earning employee names: {}", e.getMessage());
+            throw e;
+        }
+    }
+
+    @PostMapping
+    @ResponseStatus(HttpStatus.CREATED)
+    public Employee createEmployee(@Valid @RequestBody Map<String, Object> employeeInput) {
+        try {
+            String name = (String) employeeInput.get("name");
+            Integer salary = Integer.parseInt(String.valueOf(employeeInput.get("salary")));
+            Integer age = Integer.parseInt(String.valueOf(employeeInput.get("age")));
+
+            if (name == null || name.isBlank()) {
+                logger.warn("Invalid employee name: {}", name);
+                throw new IllegalArgumentException("Employee name cannot be blank");
+            }
+            if (salary < 0) {
+                logger.warn("Invalid employee salary: {}", salary);
+                throw new IllegalArgumentException("Employee salary must be a positive number");
+            }
+            if (age < 0) {
+                logger.warn("Invalid employee age: {}", age);
+                throw new IllegalArgumentException("Employee age must be a positive number");
+            }
+
+            logger.info("Creating employee: Name={}, Salary={}, Age={}", name, salary, age);
+            return employeeService.createEmployee(name, salary, age);
+        } catch (NumberFormatException e) {
+            logger.error("Error parsing salary or age: {}", e.getMessage());
+            throw new IllegalArgumentException("Invalid salary or age format");
+        } catch (Exception e) {
+            logger.error("Error creating employee: {}", e.getMessage());
+            throw e;
+        }
+    }
+
+    @DeleteMapping("/{id}")
+    @ResponseStatus(HttpStatus.OK)
+    public String deleteEmployeeById(@PathVariable @NotBlank String id) {
+        try {
+            logger.info("Deleting employee with ID: {}", id);
+            return employeeService.deleteEmployee(id);
+        } catch (Exception e) {
+            logger.error("Error deleting employee with ID {}: {}", id, e.getMessage());
+            throw e;
+        }
     }
 }

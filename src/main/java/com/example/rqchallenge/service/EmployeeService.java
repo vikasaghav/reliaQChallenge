@@ -1,90 +1,82 @@
 package com.example.rqchallenge.service;
 
+import com.example.rqchallenge.dao.EmployeeDAO;
 import com.example.rqchallenge.entities.Employee;
-import com.example.rqchallenge.exceptions.TooManyRequestsException;
-import com.example.rqchallenge.response.EmployeeResponse;
-import com.example.rqchallenge.response.EmployeeResponseSingle;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import org.springframework.beans.factory.annotation.Value;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
-import org.springframework.web.client.HttpClientErrorException;
-import org.springframework.web.client.RestTemplate;
 
 import java.util.List;
-import java.util.stream.Collectors;
 
 @Service
-public class EmployeeService {
-    @Value("${api.base-url}")
-    private String BASE_URL;
+public class EmployeeService implements EmployeeServiceInterface {
 
-    private final RestTemplate restTemplate;
+    private final EmployeeDAO employeeDAO;
     private static final Logger logger = LoggerFactory.getLogger(EmployeeService.class);
 
-    public EmployeeService(RestTemplate restTemplate) {
-        this.restTemplate = restTemplate;
+    @Autowired
+    public EmployeeService(EmployeeDAO employeeDAO) {
+        this.employeeDAO = employeeDAO;
     }
 
+    @Override
     public List<Employee> getAllEmployees() {
-        String url = BASE_URL + "/employees";
-        try {
-            EmployeeResponse response = restTemplate.getForObject(url, EmployeeResponse.class);
-            return response.getData();
-        } catch (HttpClientErrorException.TooManyRequests e) {
-            logger.error("Too Many Requests encountered while fetching all employees: {}", e.getMessage());
-            throw new TooManyRequestsException("Too Many Requests: Please try again later. " + BASE_URL + " allows 1 request per minute");
-        }
+        logger.info("Fetching all employees");
+        List<Employee> employees = employeeDAO.getAllEmployees();
+        logger.debug("Fetched {} employees", employees.size());
+        return employees;
     }
 
+    @Override
     public List<Employee> getEmployeesByNameSearch(String name) {
-        return getAllEmployees().stream()
-                .filter(employee -> employee.getEmployeeName().toLowerCase().contains(name.toLowerCase()))
-                .collect(Collectors.toList());
+        logger.info("Searching employees by name: {}", name);
+        List<Employee> employees = employeeDAO.getEmployeesByNameSearch(name);
+        logger.debug("Found {} employees by name {}", employees.size(), name);
+        return employees;
     }
 
+    @Override
     public Employee getEmployeeById(String id) {
-        String url = BASE_URL + "/employee/" + id;
-        try {
-            EmployeeResponseSingle response = restTemplate.getForObject(url, EmployeeResponseSingle.class);
-            return response.getData();
-        } catch (HttpClientErrorException.TooManyRequests e) {
-            logger.error("Too Many Requests encountered while fetching employee by ID {}: {}", id, e.getMessage());
-            throw new TooManyRequestsException("Too Many Requests: Please try again later. " + BASE_URL + " allows 1 request per minute");
+        logger.info("Fetching employee by ID: {}", id);
+        Employee employee = employeeDAO.getEmployeeById(id);
+        if (employee == null) {
+            logger.warn("Employee with ID {} not found", id);
+        } else {
+            logger.debug("Fetched employee: {}", employee);
         }
+        return employee;
     }
 
+    @Override
     public Integer getHighestSalaryOfEmployees() {
-        return getAllEmployees().stream()
-                .mapToInt(Employee::getEmployeeSalary)
-                .max()
-                .orElse(0);
+        logger.info("Fetching highest salary of employees");
+        Integer highestSalary = employeeDAO.getHighestSalaryOfEmployees();
+        logger.debug("Highest salary of employees: {}", highestSalary);
+        return highestSalary;
     }
 
+    @Override
     public List<String> getTop10HighestEarningEmployeeNames() {
-        List<String> collect = getAllEmployees().stream()
-                .sorted((a,b) -> b.getEmployeeSalary()-a.getEmployeeSalary())
-                .limit(10)
-                .map(Employee::getEmployeeName)
-                .collect(Collectors.toList());
-        return collect;
+        logger.info("Fetching top 10 highest earning employee names");
+        List<String> topNames = employeeDAO.getTop10HighestEarningEmployeeNames();
+        logger.debug("Top 10 highest earning employee names: {}", topNames);
+        return topNames;
     }
 
+    @Override
     public Employee createEmployee(String name, int salary, int age) {
-        String url = BASE_URL + "/create";
-        Employee newEmployee = new Employee(name, salary, age);
-        try {
-            EmployeeResponseSingle response = restTemplate.postForObject(url, newEmployee, EmployeeResponseSingle.class);
-            return response.getData();
-        } catch (HttpClientErrorException.TooManyRequests e) {
-            logger.error("Too Many Requests encountered while creating employee: {}", e.getMessage());
-            throw new TooManyRequestsException("Too Many Requests: Please try again later. " + BASE_URL + " allows 1 request per minute");
-        }
+        logger.info("Creating employee: Name={}, Salary={}, Age={}", name, salary, age);
+        Employee newEmployee = employeeDAO.createEmployee(name, salary, age);
+        logger.debug("Created employee: {}", newEmployee);
+        return newEmployee;
     }
 
+    @Override
     public String deleteEmployee(String id) {
-        String url = BASE_URL + "/delete/" + id;
-        restTemplate.delete(url);
-        return "Employee with ID " + id + " deleted successfully.";
+        logger.info("Deleting employee with ID: {}", id);
+        String deleteMessage = employeeDAO.deleteEmployee(id);
+        logger.debug("Delete message: {}", deleteMessage);
+        return deleteMessage;
     }
 }
